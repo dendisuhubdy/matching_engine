@@ -44,14 +44,14 @@ public:
     {
         {
             std::lock_guard < std::mutex > lock(m);
-            std::cout << "[" << std::this_thread::get_id() << "] Thread starts" << std::endl;
+            std::cout << "[ " << std::this_thread::get_id() << " ] Thread starts" << std::endl;
         }
 
         io_service->run();
 
         {
             std::lock_guard < std::mutex > lock(m);
-            std::cout << "[" << std::this_thread::get_id() << "] Thread ends" << std::endl;
+            std::cout << "[ " << std::this_thread::get_id() << " ] Thread ends" << std::endl;
         }
 
     }
@@ -112,17 +112,19 @@ public:
     }
 
 private:
-    enum { max_recent_msgs = 100 };
+    enum { max_recent_msgs = 10000 };
+    // this is the maximum amount of messages that will be broadcasted
+    // to all trading members
     std::unordered_set<std::shared_ptr<participant>> participants_;
     std::unordered_map<std::shared_ptr<participant>, std::string> name_table_;
     std::deque<std::array<char, MAX_IP_PACK_SIZE>> recent_msgs_;
 };
 
-class personInRoom: public participant,
-                    public std::enable_shared_from_this<personInRoom>
+class TradeInstrument: public participant,
+                    public std::enable_shared_from_this<TradeInstrument>
 {
 public:
-    personInRoom(boost::asio::io_service& io_service,
+    TradeInstrument(boost::asio::io_service& io_service,
                  boost::asio::io_service::strand& strand, MatchingEngine& room)
                  : socket_(io_service), strand_(strand), room_(room)
     {
@@ -134,7 +136,7 @@ public:
     {
         boost::asio::async_read(socket_,
                                 boost::asio::buffer(nickname_, nickname_.size()),
-                                strand_.wrap(boost::bind(&personInRoom::nicknameHandler, shared_from_this(), _1)));
+                                strand_.wrap(boost::bind(&TradeInstrument::nicknameHandler, shared_from_this(), _1)));
     }
 
     void onMessage(std::array<char, MAX_IP_PACK_SIZE>& msg)
@@ -145,7 +147,7 @@ public:
         {
             boost::asio::async_write(socket_,
                                      boost::asio::buffer(write_msgs_.front(), write_msgs_.front().size()),
-                                     strand_.wrap(boost::bind(&personInRoom::writeHandler, shared_from_this(), _1)));
+                                     strand_.wrap(boost::bind(&TradeInstrument::writeHandler, shared_from_this(), _1)));
         }
     }
 
@@ -167,7 +169,7 @@ private:
 
         boost::asio::async_read(socket_,
                                 boost::asio::buffer(read_msg_, read_msg_.size()),
-                                strand_.wrap(boost::bind(&personInRoom::readHandler, shared_from_this(), _1)));
+                                strand_.wrap(boost::bind(&TradeInstrument::readHandler, shared_from_this(), _1)));
     }
 
     void readHandler(const boost::system::error_code& error)
@@ -178,7 +180,7 @@ private:
 
             boost::asio::async_read(socket_,
                                     boost::asio::buffer(read_msg_, read_msg_.size()),
-                                    strand_.wrap(boost::bind(&personInRoom::readHandler, shared_from_this(), _1)));
+                                    strand_.wrap(boost::bind(&TradeInstrument::readHandler, shared_from_this(), _1)));
         }
         else
         {
@@ -196,7 +198,7 @@ private:
             {
                 boost::asio::async_write(socket_,
                                          boost::asio::buffer(write_msgs_.front(), write_msgs_.front().size()),
-                                         strand_.wrap(boost::bind(&personInRoom::writeHandler, shared_from_this(), _1)));
+                                         strand_.wrap(boost::bind(&TradeInstrument::writeHandler, shared_from_this(), _1)));
             }
         }
         else
@@ -228,11 +230,11 @@ private:
 
     void run()
     {
-        std::shared_ptr<personInRoom> new_participant(new personInRoom(io_service_, strand_, room_));
+        std::shared_ptr<TradeInstrument> new_participant(new TradeInstrument(io_service_, strand_, room_));
         acceptor_.async_accept(new_participant->socket(), strand_.wrap(boost::bind(&server::onAccept, this, new_participant, _1)));
     }
 
-    void onAccept(std::shared_ptr<personInRoom> new_participant, const boost::system::error_code& error)
+    void onAccept(std::shared_ptr<TradeInstrument> new_participant, const boost::system::error_code& error)
     {
         if (!error)
         {
@@ -256,7 +258,7 @@ int main(int argc, char* argv[])
     {
         if (argc < 2)
         {
-            std::cerr << "Usage: chat_server <port> [<port> ...]\n";
+            std::cerr << "Usage: trading_server <port> [<port> ...]\n";
             return 1;
         }
 
@@ -264,7 +266,7 @@ int main(int argc, char* argv[])
         boost::shared_ptr<boost::asio::io_service::work> work(new boost::asio::io_service::work(*io_service));
         boost::shared_ptr<boost::asio::io_service::strand> strand(new boost::asio::io_service::strand(*io_service));
 
-        std::cout << "[" << std::this_thread::get_id() << "]" << "server starts" << std::endl;
+        std::cout << "[ " << std::this_thread::get_id() << " ]" << "server starts" << std::endl;
 
         std::list < std::shared_ptr < server >> servers;
         for (int i = 1; i < argc; ++i)
